@@ -1,10 +1,11 @@
 import "dotenv/config";
-import { streamText, stepCountIs, type ModelMessage } from "ai";
+import { type ModelMessage } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createInterface } from 'node:readline';
 
 import { createMockModel } from "./mock-model";
 import { weatherTool, calculatorTool } from './tools'
+import { agentLoop } from './agent-loop'
 
 const llm = createOpenAI({
   baseURL: process.env.OPENAI_API_BASE_URL,
@@ -37,34 +38,8 @@ function ask() {
         
         messages.push({ role: 'user', content: trimmed })
         
-        const result = streamText({
-            model,
-            system: systemPrompt,
-            tools,
-            messages,
-            stopWhen: stepCountIs(5) // 最多跑 5 步
-        })
+        await agentLoop(model, tools, messages, systemPrompt)
         
-        process.stdout.write('Assistant: ')
-        let fullResponse = ''
-        
-        for await (const part of result.fullStream) {
-            switch (part.type) {
-                case 'text-delta':
-                    process.stdout.write(part.text)
-                    fullResponse += part.text
-                    break
-                case 'tool-call':
-                    console.log(`\n [🔧 Call tool: ${part.toolName}(${JSON.stringify(part.input)})]`)
-                    break
-                case 'tool-result':
-                    console.log(`  [⚙️ Tool return: ${JSON.stringify(part.output)}]`)
-                    break
-            }
-        }
-        console.log() // 换行
-        
-        messages.push({ role: 'assistant', content: fullResponse })
         ask()
     })
 }
