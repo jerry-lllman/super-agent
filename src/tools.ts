@@ -1,43 +1,50 @@
-import { jsonSchema } from 'ai'
-    
+import { jsonSchema } from "ai";
+
 export const weatherTool = {
-    description: 'Check the weather forecast for a specific city',
-    inputSchema: jsonSchema({
-        type: 'object',
-        properties: {
-            city: { type: 'string', description: 'City names, such as "Beijing" and "Shanghai"' },
-        },
-        required: ['city'],
-        additionalProperties: false
-    }),
-    execute: async ({ city }: { city: string }) => {
-        const mockWeather: Record<string, string> = {
-            'Beijing': 'Sunny, 15-25°C, south-easterly wind force 2',
-            'Shanghai': 'Cloudy, 18-22°C, south-westerly wind force 3',
-            'Guangzhou': 'Showers, 22-28°C, southerly wind force 2'
-        }
-        
-        return mockWeather[city] || `${city}: No data available`
-    }
-}
+  description: "查询指定城市的天气信息",
+  inputSchema: jsonSchema({
+    type: "object" as const,
+    properties: {
+      city: {
+        type: "string" as const,
+        description: "城市名称，如“北京”、“上海”",
+      },
+    },
+    required: ["city"],
+    additionalProperties: false,
+  }),
+  execute: async ({ city }: { city: string }) => {
+    const mockWeather: Record<string, string> = {
+      北京: "晴，15-25°C，东南风 2 级",
+      上海: "多云，18-22°C，西南风 3 级",
+      深圳: "阵雨，22-28°C，南风 2 级",
+      广州: "多云转晴，20-28°C，东风 3 级",
+      杭州: "晴，14-24°C，北风 2 级",
+      成都: "阴，16-22°C，微风",
+    };
+    return mockWeather[city] || `${city}：暂无数据`;
+  },
+};
 
 export const calculatorTool = {
-    description: "Calculate the result of a mathematucal expression. Use this when a user's query involves a mathematical operation",
-    inputSchema: jsonSchema({
-        type: 'object',
-        properties: {
-            expression: { type: 'string', description: 'Mathematical expressions, such as "2 + 3 * 4"' }
-        },
-        required: ['expression'],
-        additionalProperties: false
-    }),
-    execute: async ({ expression }: { expression: string }) => {
-        try {
-            // 生产环境不要使用 eval，这里纯演示
-            const result = new Function(`return ${expression}`)()
-            return `${expression} = ${result}`
-        } catch {
-            return `Cannot calculate: ${expression}`
-        }
+  description: "计算数学表达式的结果。当用户提问涉及数学运算时使用",
+  inputSchema: jsonSchema({
+    type: "object" as const,
+    properties: {
+      expression: {
+        type: "string" as const,
+        description: '数学表达式，如 "2 + 3 * 4"',
+      },
+    },
+    required: ["expression"],
+    additionalProperties: false,
+  }),
+  execute: async ({ expression }: { expression: string }) => {
+    try {
+      const result = new Function(`return ${expression}`)();
+      return `${expression} = ${result}`;
+    } catch {
+      return `无法计算: ${expression}`;
     }
-}
+  },
+};
