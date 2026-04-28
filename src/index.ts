@@ -1,20 +1,33 @@
 import "dotenv/config";
 import { type ModelMessage } from "ai";
-import { createOpenAI } from "@ai-sdk/openai";
-import { createInterface } from "node:readline";
+import { createDeepSeek } from "@ai-sdk/deepseek";
 
 import { createMockModel } from "./mock-model";
-import { weatherTool, calculatorTool } from "./tools";
+import { createInterface } from "node:readline";
+import { ToolRegistry } from "./tool-registry";
+import { allTools } from "./tools";
 import { agentLoop } from "./agent-loop";
 
-const llm = createOpenAI({
+const llm = createDeepSeek({
   baseURL: process.env.OPENAI_API_BASE_URL,
   apiKey: process.env.OPENAI_API_KEY,
 });
 
 const model = process.env.OPENAI_API_KEY
-  ? llm.chat("deepseek-v4-flash")
+  ? llm("deepseek-v4-flash")
   : createMockModel();
+
+const registry = new ToolRegistry();
+registry.register(...allTools);
+
+console.log(`已注册 ${registry.getAll().length} 个工具：`);
+for (const tool of registry.getAll()) {
+  const flags = [
+    tool.isConcurrencySafe ? "并发安全" : "非并发安全",
+    tool.isReadOnly ? "只读" : "可写",
+  ].join(", ");
+  console.log(`- ${tool.name}: ${tool.description} [${flags}]`);
+}
 
 const rl = createInterface({
   input: process.stdin,
@@ -22,8 +35,6 @@ const rl = createInterface({
 });
 
 const systemPrompt = `You are Super Agent, an AI assistant capable of invoking tools. When necessary, proactively use tools to retrieve information; do not fabricate data.`;
-
-const tools = { get_weather: weatherTool, calculator: calculatorTool };
 
 const messages: ModelMessage[] = [];
 
@@ -38,12 +49,14 @@ function ask() {
 
     messages.push({ role: "user", content: trimmed });
 
-    await agentLoop(model, tools, messages, systemPrompt);
+    await agentLoop(model, registry, messages, systemPrompt);
 
     ask();
   });
 }
 
-console.log('🤖 Super Agent v0.3 —— Fuses (type "exit" to quit)\n');
-console.log("试试输入：“测试死循环”、“测试重装” 或随便聊几轮观察 Token 用量\n");
+console.log('Super Agent v0.4 — Tool System (type "exit" to quit)');
+console.log(
+  '试试："帮我看看当前目录"、"读取 package.json"、"测试并发"、"测试截断"\n',
+);
 ask();

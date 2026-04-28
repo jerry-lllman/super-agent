@@ -6,7 +6,7 @@ let retryTestCount = 0;
 
 const TEXT_RESPONSES: Record<string, string> = {
   default:
-    "你好！我是 Super Agent 的模拟模型。当前使用本地模拟回复，工具调用的机制和真实 API 完全一样。\n\n在 .env 里填入 DASHSCOPE_API_KEY 即可切换到真实的 Qwen 模型。",
+    "你好！我是 Super Agent 的模拟模型。当前使用本地模拟回复，工具调用的机制和真实 API 完全一样。\n\n在 .env 里填入 OPENAI_API_KEY 即可切换到真实的 AI 模型。",
   greeting:
     "你好！我是 Super Agent v0.3，现在我不只能聊天，还有保险丝保护了 :)",
   name: "你刚才告诉我了呀！不过说实话，我是模拟模型，能“记住”是因为代码把对话历史传给了我。",

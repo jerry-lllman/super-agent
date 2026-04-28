@@ -1,4 +1,5 @@
 import { streamText, type ModelMessage } from "ai";
+import { ToolRegistry } from "./tool-registry";
 import {
   detect,
   recordCall,
@@ -9,11 +10,11 @@ import { isRetryable, calculateDelay, sleep } from "./retry.js";
 
 const MAX_STEPS = 15;
 const MAX_RETRIES = 3;
-const TOKEN_BUDGET = 15000;
+const TOKEN_BUDGET = 50000;
 
 export async function agentLoop(
   model: any,
-  tools: any,
+  registry: ToolRegistry,
   messages: ModelMessage[],
   system: string,
 ) {
@@ -37,10 +38,15 @@ export async function agentLoop(
         const result = streamText({
           model,
           system,
-          tools,
+          tools: registry.toAISDKFormat(),
           messages,
           maxRetries: 0,
           onError: () => {},
+          // 关闭 DeepSeek v4 的 thinking 模式，避免多轮 + 工具调用时
+          // 因 reasoning_content 校验失败而 400。对其它 provider 是无副作用的额外字段。
+          providerOptions: {
+            deepseek: { thinking: { type: "disabled" } },
+          },
         });
 
         for await (const part of result.fullStream) {
@@ -73,8 +79,14 @@ export async function agentLoop(
               break;
             }
 
-            case "tool-result":
-              console.log(`  [结果: ${JSON.stringify(part.output)}]`);
+            case "tool-result": {
+              const output =
+                typeof part.output === "string"
+                  ? part.output
+                  : JSON.stringify(part.output);
+              const preview =
+                output.length > 120 ? output.slice(0, 120) + "..." : output;
+              console.log(`  [结果: ${part.toolName}] ${preview}`);
               if (lastToolCall) {
                 recordResult(
                   lastToolCall.name,
@@ -83,6 +95,7 @@ export async function agentLoop(
                 );
               }
               break;
+            }
           }
         }
 
@@ -93,7 +106,7 @@ export async function agentLoop(
         if (attempt > MAX_RETRIES || !isRetryable(error as Error)) throw error;
         const delay = calculateDelay(attempt);
         console.log(
-          `  [重试] 第 ${attempt}/${MAX_RETRIES} 次失败，${delay}ms 后重试...`,
+          `  [重试] 第 ${attempt}/${MAX_RETRIES} 次，${delay}ms 后...`,
         );
         await sleep(delay);
         hasToolCall = false;
@@ -108,22 +121,18 @@ export async function agentLoop(
       break;
     }
 
-    messages.push(...stepResponse.messages);
+    messages.push(...stepResponse!.messages);
 
-    // Token 预算追踪
-    const inp =
-      typeof stepUsage?.inputTokens === "number"
-        ? stepUsage.inputTokens
-        : (stepUsage?.inputTokens?.total ?? 0);
-    const out =
-      typeof stepUsage?.outputTokens === "number"
-        ? stepUsage.outputTokens
-        : (stepUsage?.outputTokens?.total ?? 0);
+    const inp = stepUsage?.inputTokens?.total ?? stepUsage?.inputTokens ?? 0;
+    const out = stepUsage?.outputTokens?.total ?? stepUsage?.outputTokens ?? 0;
     totalTokens += inp + out;
-    const pct = Math.round((totalTokens / TOKEN_BUDGET) * 100);
-    console.log(`  [Token] ${totalTokens}/${TOKEN_BUDGET} (${pct}%)`);
+    if (totalTokens > TOKEN_BUDGET * 0.9) {
+      console.log(
+        `  [Token] ${totalTokens}/${TOKEN_BUDGET} (${Math.round((totalTokens / TOKEN_BUDGET) * 100)}%)`,
+      );
+    }
     if (totalTokens > TOKEN_BUDGET) {
-      console.log("\n[Token 预算耗尽，强制停止]");
+      console.log("\n[Token 预算耗尽]");
       break;
     }
 
@@ -136,6 +145,6 @@ export async function agentLoop(
   }
 
   if (step >= MAX_STEPS) {
-    console.log("\n[达到最大步数限制，强制停止]");
+    console.log("\n[达到最大步数]");
   }
 }
