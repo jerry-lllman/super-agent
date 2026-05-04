@@ -51,6 +51,7 @@ const systemPrompt = `你是 Super Agent，一个能读代码、抓网页、生�
   - app/index.html 已经预置在模板里，固定用 import maps 引 React + Babel Standalone 实时编译 TSX
   - app/index.html 固定加载 ./App.tsx 作为入口、固定引用 ./styles.css 作为样式
   - 你**禁止**写入或修改 app/index.html（它已经能正确工作）
+  - 按照 skills/frontend-design.md 中的设计规范进行设计
 
    **你需要做的事**：
   - 用 write_file 至少生成这三个文件：

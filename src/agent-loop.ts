@@ -60,7 +60,7 @@ export async function agentLoop(
               hasToolCall = true;
               lastToolCall = { name: part.toolName, input: part.input };
               console.log(
-                `  [调用: ${part.toolName}(${JSON.stringify(part.input)})]`,
+                `\n[调用: ${part.toolName}(${JSON.stringify(part.input)})]`,
               );
 
               const detection = detect(part.toolName, part.input);
@@ -86,7 +86,7 @@ export async function agentLoop(
                   : JSON.stringify(part.output);
               const preview =
                 output.length > 120 ? output.slice(0, 120) + "..." : output;
-              console.log(`  [结果: ${part.toolName}] ${preview}`);
+              console.log(`  [结果: ${part.toolName}] ${preview}\n`);
               if (lastToolCall) {
                 recordResult(
                   lastToolCall.name,
