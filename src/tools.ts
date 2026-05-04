@@ -1,4 +1,3 @@
-import { ToolDefinition } from "./tool-registry";
 import {
   existsSync,
   readdirSync,
@@ -7,6 +6,11 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join, relative, resolve } from "node:path";
+
+import fg from "fast-glob";
+
+import { ToolDefinition } from "./tool-registry";
+import { execSync } from "node:child_process";
 
 export const weatherTool: ToolDefinition = {
   name: "get_weather",
@@ -171,6 +175,43 @@ export const editFileTool: ToolDefinition = {
   },
 };
 
+export const globTool: ToolDefinition = {
+  name: "glob",
+  description:
+    '按模式搜索文件。支持 * 和 ** 通配符，如 "src/**/*.ts" 匹配 src 下所有 TypeScript 文件',
+  parameters: {
+    type: "object",
+    properties: {
+      pattern: {
+        type: "string",
+        description: '搜索模式，如 "**/*.ts"、"src/*.json"',
+      },
+      path: { type: "string", description: "搜索起始目录，默认当前目录" },
+    },
+    required: ["pattern"],
+    additionalProperties: false,
+  },
+  isConcurrencySafe: true,
+  isReadOnly: true,
+  execute: async ({
+    pattern,
+    path = ".",
+  }: {
+    pattern: string;
+    path?: string;
+  }) => {
+    const results = await fg(pattern, {
+      cwd: resolve(path),
+      ignore: ["node_modules/**", ".git/**", "dist/**", "build/**"],
+      dot: false,
+      onlyFiles: true,
+      followSymbolicLinks: false,
+    });
+    if (results.length === 0) return `没有找到匹配 "${pattern}" 的文件`;
+    return results.sort().join("\n");
+  },
+};
+
 export const grepTool: ToolDefinition = {
   name: "grep",
   description: "在文件中搜索匹配指定模式的内容。返回匹配的行号和内容",
@@ -243,6 +284,77 @@ export const grepTool: ToolDefinition = {
 
     function walk(dir: string) {
       if (matches.length >= 50) return;
+      let entries: string[];
+      try {
+        entries = readdirSync(dir);
+      } catch {
+        return;
+      }
+
+      for (const name of entries) {
+        if (SKIP.has(name)) continue;
+        const full = join(dir, name);
+        try {
+          const stat = statSync(full);
+          if (stat.isDirectory()) {
+            walk(full);
+          } else {
+            searchFile(full);
+          }
+        } catch (error) {
+          // skip
+        }
+      }
+    }
+
+    const stat = statSync(baseDir);
+    if (stat.isFile()) {
+      searchFile(baseDir);
+    } else {
+      walk(baseDir);
+    }
+
+    if (matches.length === 0) return `没有找到匹配 "${pattern}" 的内容`;
+    const suffix =
+      matches.length >= 50 ? "\n... （结果以截断，共 50+ 条匹配）" : "";
+    return matches.join("\n") + suffix;
+  },
+};
+
+export const bashTool: ToolDefinition = {
+  name: "bash",
+  description:
+    "执行 shell 命令并返回输出。适合运行脚本、检查环境、执行构建等操作",
+  parameters: {
+    type: "object",
+    properties: {
+      command: { type: "string", description: "要执行的 shell 命令" },
+    },
+    required: ["command"],
+    additionalProperties: false,
+  },
+  isConcurrencySafe: false,
+  isReadOnly: false,
+  maxResultChars: 3000,
+  execute: async ({ command }: { command: string }) => {
+    try {
+      execSync("echo test", { stdio: "ignore" });
+    } catch {
+      return `[bash 不可用] 当前环境（WebContainer）不支持 shell 命令。本地终端运行 pnpm start 可使用 bash 工具。`;
+    }
+
+    try {
+      const output = execSync(command, {
+        encoding: "utf-8",
+        timeout: 10000, //  生产 30 - 60
+        maxBuffer: 1024 * 1024,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      return output || "(命令执行成功，无输出)";
+    } catch (error: any) {
+      const stderr = error.stderr || "";
+      const stdout = error.stdout || "";
+      return `命令执行失败 (exit ${error.status || 1}):\n${stderr || stdout || error.message}`;
     }
   },
 };
@@ -254,4 +366,7 @@ export const allTools: ToolDefinition[] = [
   writeFileTool,
   listDirectoryTool,
   editFileTool,
+  globTool,
+  grepTool,
+  bashTool,
 ];

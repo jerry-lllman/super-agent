@@ -1,21 +1,23 @@
 {
   "name": "super-agent",
   "version": "1.0.0",
-    "type": "module",
+  "type": "module",
   "description": "",
   "main": "index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts"
-    },
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@10.12.4",
   "dependencies": {
+    "@ai-sdk/deepseek": "^2.0.32",
     "@ai-sdk/openai": "^3.0.53",
     "ai": "^6.0.168",
-    "dotenv": "^17.4.2"
+    "dotenv": "^17.4.2",
+    "fast-glob": "^3.3.3"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
