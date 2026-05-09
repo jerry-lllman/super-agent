@@ -63,7 +63,19 @@ const systemPrompt = `你是 Super Agent，一个能读代码、抓网页、生�
   - 文件全部写完后**立即**调用 start_preview 启动预览服务器（这一步绝对不能省）
   - 最后用一段简短文本告诉用户：生成了哪些文件 + 预览地址
 
-回答简洁直接，独立的工具调用尽量并行执行。`;
+  4. 用户让你搜索或查询时：
+  你有 web_search 和 web_fetch 两个搜索相关的工具：
+  - web_search：搜索互联网，返回相关网页的标题、链接和内容摘要
+  - web_fetch：抓取指定 URL 的完整内容，转为 Markdown
+
+  当用户问的问题需要最新信息时，先用 web_search 搜索，拿到结果后总结回答。
+  如果搜索结果的摘要不够详细，用 web_fetch 抓取具体链接的全文。
+
+回答简洁直接，独立的工具调用尽量并行执行。引用信息时标注来源链接`;
+
+`你是 Super Agent，一个能搜索互联网、读写代码的 AI 助手。
+
+`;
 
 const messages: ModelMessage[] = [];
 
@@ -84,9 +96,14 @@ function ask() {
   });
 }
 
-console.log('\nSuper Agent v0.4.2 — Mini Apps（"exit" 退出）');
-console.log('三个推荐 demo：');
-console.log('  1. 找出项目里所有 TODO');
-console.log('  2. 去 https://ai-sdk.dev/docs/ai-sdk-core/tools-and-tool-calling 看下文档总结');
-console.log('  3. 做一个待办清单的网页应用\n');
+console.log('\nSuper Agent v0.4.3 — Mini Apps（"exit" 退出）');
+console.log("试试：");
+console.log("  1. 找出项目里所有 TODO");
+console.log(
+  "  2. 去 https://ai-sdk.dev/docs/ai-sdk-core/tools-and-tool-calling 看下文档总结",
+);
+console.log("  3. 做一个待办清单的网页应用\n");
+console.log("  4. 搜索一下 Vercel AI SDK 最新版本");
+console.log("  5. 2026 年最流行的 Agent 框架是什么");
+console.log("  6. 帮我查一下 TypeScript 5.8 有什么新特性\n");
 ask();
