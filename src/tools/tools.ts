@@ -481,7 +481,7 @@ export const startPreviewTool: ToolDefinition = {
   },
 };
 
-import { pickSearchTool, webFetchTool } from "./search-tools.js";
+import { pickSearchTool, webFetchTool } from "./search-tools";
 
 export const allTools: ToolDefinition[] = [
   weatherTool,

@@ -4,8 +4,8 @@ import { createDeepSeek } from "@ai-sdk/deepseek";
 
 import { createMockModel } from "./mock-model";
 import { createInterface } from "node:readline";
-import { ToolRegistry } from "./tool-registry";
-import { allTools } from "./tools";
+import { ToolRegistry } from "./tools/tool-registry";
+import { allTools } from "./tools/tools";
 import { agentLoop } from "./agent-loop";
 
 const llm = createDeepSeek({
