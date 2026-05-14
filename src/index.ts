@@ -7,6 +7,7 @@ import { createInterface } from "node:readline";
 import { ToolRegistry } from "./tools/tool-registry";
 import { allTools } from "./tools/tools";
 import { agentLoop } from "./agent-loop";
+import { MCPClient, MockMCPClient } from "./tools/mcp-client";
 
 const llm = createDeepSeek({
   baseURL: process.env.OPENAI_API_BASE_URL,
@@ -20,21 +21,69 @@ const model = process.env.OPENAI_API_KEY
 const registry = new ToolRegistry();
 registry.register(...allTools);
 
-console.log(`已注册 ${registry.getAll().length} 个工具：`);
-for (const tool of registry.getAll()) {
-  const flags = [
-    tool.isConcurrencySafe ? "并发安全" : "非并发安全",
-    tool.isReadOnly ? "只读" : "可写",
-  ].join(", ");
-  console.log(`- ${tool.name}: ${tool.description} [${flags}]`);
+async function connectMCP() {
+  const githubToken = process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
+
+  let canSpawn = true;
+  try {
+    const { execSync } = await import("node:child_process");
+    execSync("echo test", { stdio: "ignore" });
+  } catch {
+    canSpawn = false;
+  }
+
+  if (githubToken && canSpawn) {
+    console.log("\n正在连接Github MCP 服务器...");
+
+    try {
+      const client = new MCPClient(
+        "npx",
+        ["-y", "@modelcontextprotocol/server-github"],
+        { GITHUB_PERSONAL_ACCESS_TOKEN: githubToken },
+      );
+
+      const tools = await registry.registerMCPServer("github", client);
+      console.log(`   已注册 ${tools.length} 个 MCP 工具`);
+      return;
+    } catch (error) {
+      console.log(
+        `   Github MCP连接失败：${error instanceof Error ? error.message : error}`,
+      );
+      console.log("   降级味 Mock MCP");
+    }
+  }
+
+  if (!githubToken) {
+    console.log(
+      "\n为配置 GITHUB_PERSONAL_ACCESS_TOKEN，无法连接 Github MCP 服务器，已降级为 Mock MCP",
+    );
+  }
+
+  const mockClient = new MockMCPClient();
+  const tools = await registry.registerMCPServer("github", mockClient);
+  console.log(`   已注册 ${tools.length} 个 Mock MCP 工具`);
 }
 
-const rl = createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
+async function main() {
+  await connectMCP();
 
-const systemPrompt = `你是 Super Agent，一个能读代码、抓网页、生成项目的 AI 助手。
+  console.log(`已注册 ${registry.getAll().length} 个工具：`);
+  for (const tool of registry.getAll()) {
+    const isMCP = tool.name.startsWith("mcp__");
+    const flags = [
+      isMCP ? "MCP" : "内置",
+      tool.isConcurrencySafe ? "并发安全" : "非并发安全",
+      tool.isReadOnly ? "只读" : "可写",
+    ].join(", ");
+    console.log(`- ${tool.name}: ${tool.description} [${flags}]`);
+  }
+
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  const systemPrompt = `你是 Super Agent，一个能读代码、抓网页、生成项目以及一个有工具调用能力的 AI 助手。
 你有这些工具可用：read_file, write_file, list_directory, edit_file, glob, grep, bash, fetch_url, start_preview, get_weather, calculator。
 
 针对常见任务的执行策略：
@@ -71,39 +120,46 @@ const systemPrompt = `你是 Super Agent，一个能读代码、抓网页、生�
   当用户问的问题需要最新信息时，先用 web_search 搜索，拿到结果后总结回答。
   如果搜索结果的摘要不够详细，用 web_fetch 抓取具体链接的全文。
 
+4. 你有内置工具和 MCP 工具可用。MCP 工具以 mcp__ 开头，如 mcp__github__list_issues。
+需要查询 GitHub 信息时，使用 mcp__github__ 前缀的工具。
+需要操作本地文件时，使用内置工具。
+
 回答简洁直接，独立的工具调用尽量并行执行。引用信息时标注来源链接`;
 
-`你是 Super Agent，一个能搜索互联网、读写代码的 AI 助手。
+  const messages: ModelMessage[] = [];
 
-`;
+  function ask() {
+    rl.question("\nYou: ", async (input) => {
+      const trimmed = input.trim();
+      if (!trimmed || trimmed === "exit") {
+        console.log("Bye!");
+        rl.close();
+        return;
+      }
 
-const messages: ModelMessage[] = [];
+      messages.push({ role: "user", content: trimmed });
 
-function ask() {
-  rl.question("\nYou: ", async (input) => {
-    const trimmed = input.trim();
-    if (!trimmed || trimmed === "exit") {
-      console.log("Bye!");
-      rl.close();
-      return;
-    }
+      await agentLoop(model, registry, messages, systemPrompt);
 
-    messages.push({ role: "user", content: trimmed });
+      ask();
+    });
+  }
 
-    await agentLoop(model, registry, messages, systemPrompt);
+  console.log('\nSuper Agent v0.5 — MCP (type "exit" to quit)');
+  console.log("试试：");
+  console.log("  1. 找出项目里所有 TODO");
+  console.log(
+    "  2. 去 https://ai-sdk.dev/docs/ai-sdk-core/tools-and-tool-calling 看下文档总结",
+  );
+  console.log("  3. 做一个待办清单的网页应用\n");
+  console.log("  4. 搜索一下 Vercel AI SDK 最新版本");
+  console.log("  5. 2026 年最流行的 Agent 框架是什么");
+  console.log("  6. 帮我查一下 TypeScript 5.8 有什么新特性\n");
 
-    ask();
-  });
+  console.log("  7. 查看 vercel/ai 的 issues");
+  console.log("  8. 搜索 MCP 相关的仓库\n");
+
+  ask();
 }
 
-console.log('\nSuper Agent v0.4.3 — Mini Apps（"exit" 退出）');
-console.log("试试：");
-console.log("  1. 找出项目里所有 TODO");
-console.log(
-  "  2. 去 https://ai-sdk.dev/docs/ai-sdk-core/tools-and-tool-calling 看下文档总结",
-);
-console.log("  3. 做一个待办清单的网页应用\n");
-console.log("  4. 搜索一下 Vercel AI SDK 最新版本");
-console.log("  5. 2026 年最流行的 Agent 框架是什么");
-console.log("  6. 帮我查一下 TypeScript 5.8 有什么新特性\n");
-ask();
+main().catch(console.error);
