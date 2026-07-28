@@ -33,14 +33,28 @@ async function connectMCP() {
   }
 
   if (githubToken && canSpawn) {
-    console.log("\n正在连接Github MCP 服务器...");
+    const useOfficialSDK = process.env.MCP_IMPL === "official";
+    const implLabel = useOfficialSDK ? "官方 SDK" : "自定义实现";
+    console.log(`\n正在连接 Github MCP 服务器 (${implLabel})...`);
 
     try {
-      const client = new MCPClient(
-        "npx",
-        ["-y", "@modelcontextprotocol/server-github"],
-        { GITHUB_PERSONAL_ACCESS_TOKEN: githubToken },
-      );
+      let client: MCPClient | MockMCPClient;
+      if (useOfficialSDK) {
+        const { MCPOfficialClient } = await import(
+          "./tools/mcp-client-official"
+        );
+        client = new MCPOfficialClient(
+          "npx",
+          ["-y", "@modelcontextprotocol/server-github"],
+          { GITHUB_PERSONAL_ACCESS_TOKEN: githubToken },
+        );
+      } else {
+        client = new MCPClient(
+          "npx",
+          ["-y", "@modelcontextprotocol/server-github"],
+          { GITHUB_PERSONAL_ACCESS_TOKEN: githubToken },
+        );
+      }
 
       const tools = await registry.registerMCPServer("github", client);
       console.log(`   已注册 ${tools.length} 个 MCP 工具`);
@@ -49,7 +63,7 @@ async function connectMCP() {
       console.log(
         `   Github MCP连接失败：${error instanceof Error ? error.message : error}`,
       );
-      console.log("   降级味 Mock MCP");
+      console.log("   降级为 Mock MCP");
     }
   }
 
