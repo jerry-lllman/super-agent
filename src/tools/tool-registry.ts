@@ -8,6 +8,8 @@ export interface ToolDefinition {
   isConcurrencySafe?: boolean;
   isReadOnly?: boolean;
   maxResultChars?: number;
+  shouldDefer?: boolean;
+  searchHint?: string; // 搜索提示词，帮助 ToolSearch 匹配
   execute: (input: any) => Promise<unknown>;
 }
 
@@ -20,6 +22,8 @@ export class ToolRegistry {
   private exclusiveLock = false;
   private concurrentCount = 0;
   private waitQueue: Array<() => void> = [];
+
+  private discoveredTools = new Set<string>()
 
   register(...tools: ToolDefinition[]): void {
     for (const tool of tools) {
@@ -52,9 +56,9 @@ export class ToolRegistry {
         isConcurrencySafe: true,
         isReadOnly: true,
         maxResultChars: 3000,
-        execute: async (input: any) => {
-          return toolClient.callTool(originalName, input);
-        },
+        shouldDefer: true,
+        searchHint: `${serverName} ${tool.name} ${tool.description}`,
+        execute: async (input: any) => toolClient.callTool(originalName, input)
       });
 
       registered.push(prefixName);
@@ -76,6 +80,30 @@ export class ToolRegistry {
 
   getAll(): ToolDefinition[] {
     return Array.from(this.tools.values());
+  }
+
+  getActiveTools(): ToolDefinition[] {
+    return this.getAll().filter(tool => {
+      if (tool.shouldDefer && !this.discoveredTools.has(tool.name)) {
+        return false
+      }
+      return true
+    })
+  }
+
+  getDeferredToolSummary(): string {
+    const deferred = this.getAll().filter(tool => {
+      return tool.shouldDefer && !this.discoveredTools.has(tool.name)
+    })
+
+    if (deferred.length === 0) return ''
+
+    const lines = deferred.map(t => {
+      const hint = t.searchHint ? ` - ${t.searchHint}` : ''
+      return `  - ${t.name}${hint}`
+    })
+
+    return `\n以下工具可用，但需要先通过 tool_search 搜索获取完整定义：\n${lines.join('\n')}`
   }
 
   private async acquireConcurrent(): Promise<void> {
@@ -109,13 +137,16 @@ export class ToolRegistry {
 
   toAISDKFormat(): Record<string, any> {
     const result: Record<string, any> = {};
-    for (const [name, tool] of this.tools) {
+
+    const activeTools = this.getActiveTools()
+
+    for (const tool of activeTools) {
       const maxChars = tool.maxResultChars;
       const executeFn = tool.execute;
       const isSafe = tool.isConcurrencySafe === true;
       const registry = this;
 
-      result[name] = {
+      result[tool.name] = {
         description: tool.description,
         inputSchema: jsonSchema(tool.parameters as any),
         execute: async (input: any) => {
@@ -143,6 +174,28 @@ export class ToolRegistry {
     }
     return result;
   }
+
+  searchTools(query: string): ToolDefinition[] {
+    const q = query.trim()
+    const results: ToolDefinition[] = []
+
+    const names = q.includes(',')
+      ? q.split(',').map(n => n.trim()).filter(Boolean)
+      : [q]
+
+    for (const name of names) {
+      const tool = this.tools.get(name)
+
+      if (tool && tool.name !== 'tool_search') {
+        results.push(tool)
+        this.discoveredTools.add(tool.name)
+      }
+    }
+
+    return results
+  }
+
+
 }
 
 export function truncateResult(

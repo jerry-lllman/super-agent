@@ -109,6 +109,18 @@ export const serperSearchTool: ToolDefinition = {
 };
 
 // Web Fetch (手动挡配套)
+//
+// 【与 Claude Code 的差异】
+// Claude Code 的 WebFetch = 抓取 HTML → 转 Markdown → 用小模型对内容执行 prompt → 返回"答案"
+//   例: WebFetch({ url: "...", prompt: "有哪些新特性？" }) → "React 19 引入了 Server Components..."
+//   本质是一个微型 RAG 管道，内置小模型做阅读理解。
+//
+// 我们的 web_fetch = 抓取 HTML → 转 Markdown → 直接返回全文
+//   例: web_fetch({ url: "..." }) → "# React Blog\n\n## 2024-06-15\n\nReact 19..."
+//   本质是 HTTP 客户端 + HTML→Markdown 转换器，阅读理解完全交给主 LLM。
+//
+// 另外本项目还有一个 fetch_url（tools.ts），输出纯文本（regex 剥标签），
+// 与本工具的差异仅在于输出格式（Markdown vs 纯文本），而非能力层级。
 export const webFetchTool: ToolDefinition = {
   name: "web_fetch",
   description:

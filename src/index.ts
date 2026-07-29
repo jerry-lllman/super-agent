@@ -4,7 +4,7 @@ import { createDeepSeek } from "@ai-sdk/deepseek";
 
 import { createMockModel } from "./mock-model";
 import { createInterface } from "node:readline";
-import { ToolRegistry } from "./tools/tool-registry";
+import { ToolDefinition, ToolRegistry } from "./tools/tool-registry";
 import { allTools } from "./tools/tools";
 import { agentLoop } from "./agent-loop";
 import { MCPClient, MockMCPClient } from "./tools/mcp-client";
@@ -20,6 +20,34 @@ const model = process.env.OPENAI_API_KEY
 
 const registry = new ToolRegistry();
 registry.register(...allTools);
+
+const toolSearchTool: ToolDefinition = {
+  name: 'tool_search',
+  description: '获取延迟工具的完整定义。传入工具名（从系统提示的延迟工具列表中选取），返回该工具的完整参数 Schema',
+  parameters: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: '工具名，如 "mcp__github__list_issues"。支持逗号分隔多个工具名' },
+    },
+    required: ['query'],
+    additionalProperties: false,
+  },
+  isConcurrencySafe: true,
+  isReadOnly: true,
+  execute: async ({ query }: { query: string }) => {
+    const results = registry.searchTools(query);
+    if (results.length === 0) {
+      return `没有找到匹配 "${query}" 的工具`;
+    }
+    return results.map(t => ({
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters,
+    }));
+  },
+};
+
+registry.register(toolSearchTool)
 
 async function connectMCP() {
   const githubToken = process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
@@ -92,53 +120,21 @@ async function main() {
     console.log(`- ${tool.name}: ${tool.description} [${flags}]`);
   }
 
+  const deferredSummary = registry.getDeferredToolSummary()
+
+  console.log(`\n deferredSummary: ${deferredSummary} \n`)
+
+  const systemPrompt = `你是 Super Agent，一个有工具调用能力的 AI 助手。
+你有内置工具和 MCP 工具可用。
+如果你需要的工具不在当前列表中，使用 tool_search 工具搜索可用工具。
+回答要简洁直接。${deferredSummary}`;
+
+
   const rl = createInterface({
     input: process.stdin,
     output: process.stdout,
   });
 
-  const systemPrompt = `你是 Super Agent，一个能读代码、抓网页、生成项目以及一个有工具调用能力的 AI 助手。
-你有这些工具可用：read_file, write_file, list_directory, edit_file, glob, grep, bash, fetch_url, start_preview, get_weather, calculator。
-
-针对常见任务的执行策略：
-
-1. 用户让你"分析项目"或"找代码"时：
-  先 list_directory 看结构 → grep 定位关键内容 → 必要时 read_file 看细节 → 最后给出归纳总结。
-
-2. 用户给你 URL 时：
-  用 fetch_url 抓取（多 URL 可以并行），再综合总结。
-
-3. 用户让你"做一个网页应用 / 待办应用 / 任意 web demo"时（必须实际调用工具，不要只描述）：
-
-   **重要的项目约定（不要自己重写 bootstrap）**：
-  - app/index.html 已经预置在模板里，固定用 import maps 引 React + Babel Standalone 实时编译 TSX
-  - app/index.html 固定加载 ./App.tsx 作为入口、固定引用 ./styles.css 作为样式
-  - 你**禁止**写入或修改 app/index.html（它已经能正确工作）
-  - 按照 skills/frontend-design.md 中的设计规范进行设计
-
-   **你需要做的事**：
-  - 用 write_file 至少生成这三个文件：
-    1. app/styles.css — 应用样式
-     2. app/App.tsx — **必须**用 \`import { createRoot } from 'react-dom/client'\` 把组件渲染到 \`document.getElementById('root')\`
-    3. app/Button.tsx 或其他组件 .tsx — 可被 App.tsx import
-  - .tsx 之间用相对路径 import：\`import { Button } from './Button.tsx'\`（必须带 .tsx 后缀）
-  - React 用 \`import React, { useState } from 'react'\`，不要从其他源导入
-  - 文件全部写完后**立即**调用 start_preview 启动预览服务器（这一步绝对不能省）
-  - 最后用一段简短文本告诉用户：生成了哪些文件 + 预览地址
-
-  4. 用户让你搜索或查询时：
-  你有 web_search 和 web_fetch 两个搜索相关的工具：
-  - web_search：搜索互联网，返回相关网页的标题、链接和内容摘要
-  - web_fetch：抓取指定 URL 的完整内容，转为 Markdown
-
-  当用户问的问题需要最新信息时，先用 web_search 搜索，拿到结果后总结回答。
-  如果搜索结果的摘要不够详细，用 web_fetch 抓取具体链接的全文。
-
-4. 你有内置工具和 MCP 工具可用。MCP 工具以 mcp__ 开头，如 mcp__github__list_issues。
-需要查询 GitHub 信息时，使用 mcp__github__ 前缀的工具。
-需要操作本地文件时，使用内置工具。
-
-回答简洁直接，独立的工具调用尽量并行执行。引用信息时标注来源链接`;
 
   const messages: ModelMessage[] = [];
 
