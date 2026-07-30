@@ -1,0 +1,164 @@
+import { ToolDefinition } from "./registry";
+import TurndownService from "turndown";
+
+// 自动挡
+export const tavilySearchTool: ToolDefinition = {
+  name: "web_search",
+  description: "搜索互联网获取最新信息。返回相关网页的标题、链接和内容摘要",
+  parameters: {
+    type: "object",
+    properties: {
+      query: { type: "string", description: "搜索关键词" },
+      max_results: {
+        type: "number",
+        description: "返回的最大结果数量，默认为5",
+      },
+    },
+    required: ["query"],
+  },
+  isConcurrencySafe: true,
+  isReadOnly: true,
+  maxResultChars: 3000,
+  // 调用 Tavily 搜索接口，并把摘要和搜索结果整理成 Markdown 文本返回。
+  execute: async ({ query, max_results = 5 }) => {
+    const apiKey = process.env.TAVILY_API_KEY;
+    if (!apiKey) return "[web_search] 错误：TAVILY_API_KEY 未设置";
+
+    const res = await fetch("https://api.tavily.com/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: apiKey,
+        query,
+        max_results,
+        include_answer: true,
+      }),
+    });
+
+    if (!res.ok) return `[web_search] 错误：API请求失败，状态码 ${res.status}`;
+
+    const data = await res.json();
+    const lines: string[] = [];
+
+    if (data.answer) {
+      lines.push(`## AI 摘要\n${data.answer}\n`);
+    }
+
+    for (const result of data.results || []) {
+      lines.push(`### ${result.title}`);
+      lines.push(result.url);
+      lines.push(result.content || result.snippet || "");
+      lines.push(""); // 空行分隔
+    }
+
+    return lines.join("\n") || "[web_search] 没有找到相关结果";
+  },
+};
+
+// 手动挡
+export const serperSearchTool: ToolDefinition = {
+  name: "serper_search",
+  description:
+    "搜索互联网获取最新信息。返回 Google 搜索结果的标题、链接和内容摘要",
+  parameters: {
+    type: "object",
+    properties: {
+      query: { type: "string", description: "搜索关键词" },
+      max_results: {
+        type: "number",
+        description: "返回的最大结果数量，默认为5",
+      },
+    },
+    required: ["query"],
+  },
+  isConcurrencySafe: true,
+  isReadOnly: true,
+  maxResultChars: 3000,
+  // 调用 Serper 的 Google 搜索接口，按搜索结果顺序拼接标题、链接和摘要。
+  execute: async ({ query, max_results = 5 }) => {
+    const apiKey = process.env.SERPER_API_KEY;
+    if (!apiKey) return "[serper_search] 错误：SERPER_API_KEY 未设置";
+
+    const res = await fetch("https://google.serper.dev/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
+      body: JSON.stringify({ q: query, num: max_results }),
+    });
+
+    if (!res.ok)
+      return `[serper_search] 错误：API请求失败，状态码 ${res.status}`;
+
+    const data = await res.json();
+    const lines: string[] = [];
+
+    // Knowledge Graph
+    if (data.knowledgeGraph) {
+      const kg = data.knowledgeGraph;
+      lines.push(`## ${kg.title}`);
+      if (kg.description) lines.push(kg.description);
+      lines.push("");
+    }
+
+    for (const result of (data.organic || []).slice(0, max_results)) {
+      lines.push(`### ${result.title}`);
+      lines.push(result.link);
+      lines.push(result.snippet || "");
+      lines.push(""); // 空行分隔
+    }
+
+    return lines.join("\n") || "[serper_search] 没有找到相关结果";
+  },
+};
+
+// Web Fetch (手动挡配套)
+export const webFetchTool: ToolDefinition = {
+  name: "web_fetch",
+  description:
+    "抓取指定 URL 的网页内容，转换为 Markdown 格式。搭配 web_search 使用——先搜索拿到链接，再用这个工具读取详细内容",
+  parameters: {
+    type: "object",
+    properties: {
+      url: { type: "string", description: "要抓取的网页 URL" },
+    },
+    required: ["url"],
+  },
+  isConcurrencySafe: true,
+  isReadOnly: true,
+  maxResultChars: 3000,
+  // 抓取网页 HTML 并转换为 Markdown，让主模型负责后续阅读和总结。
+  execute: async ({ url }: { url: string }) => {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; SuperAgent/1.0)",
+          Accept: "text/html,application/xhtml+xml",
+        },
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (!res.ok) return `抓取失败：状态码 ${res.status}`;
+
+      const html = await res.text();
+      return htmlToMarkdown(html);
+    } catch (e: any) {
+      return `抓取失败：${e.message}`;
+    }
+  },
+};
+
+const turndown = new TurndownService({
+  headingStyle: "atx",
+  codeBlockStyle: "fenced",
+});
+
+turndown.remove(["script", "style", "nav", "footer", "header", "iframe"]);
+
+// 只做格式转换，不在这里进行内容理解，保持工具职责单一。
+const htmlToMarkdown = (html: string): string => turndown.turndown(html);
+
+// 根据环境变量选择实际注册的搜索工具；没有配置时保留 Tavily 以返回清晰缺省错误。
+export function pickSearchTool(): ToolDefinition {
+  if (process.env.TAVILY_API_KEY) return tavilySearchTool;
+  if (process.env.SERPER_API_KEY) return serperSearchTool;
+  return tavilySearchTool;
+}

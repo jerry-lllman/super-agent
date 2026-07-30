@@ -4,8 +4,8 @@ import { createDeepSeek } from "@ai-sdk/deepseek";
 
 import { createMockModel } from "./mock-model";
 import { createInterface } from "node:readline";
-import { ToolDefinition, ToolRegistry } from "./tools/tool-registry";
-import { allTools } from "./tools/tools";
+import { ToolDefinition, ToolRegistry } from "./tools/registry";
+import { allTools } from "./tools";
 import { agentLoop } from "./agent-loop";
 import { MCPClient, MockMCPClient } from "./tools/mcp-client";
 import { SessionStore } from "./session/store";

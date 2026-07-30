@@ -1,5 +1,5 @@
 import { streamText, type ModelMessage } from "ai";
-import { ToolRegistry } from "./tools/tool-registry";
+import { ToolRegistry } from "./tools/registry";
 import {
   detect,
   recordCall,
