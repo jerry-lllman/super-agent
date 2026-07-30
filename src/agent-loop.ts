@@ -12,6 +12,7 @@ const MAX_STEPS = 15;
 const MAX_RETRIES = 3;
 const TOKEN_BUDGET = 50000;
 
+// 执行一次完整的 Agent 推理循环：流式生成、处理工具调用、重试和预算控制。
 export async function agentLoop(
   model: any,
   registry: ToolRegistry,
@@ -35,6 +36,7 @@ export async function agentLoop(
 
     for (let attempt = 1; ; attempt++) {
       try {
+        // 每次尝试都重新创建流，避免失败后的半截响应污染下一轮重试。
         const result = streamText({
           model,
           system,
@@ -49,6 +51,7 @@ export async function agentLoop(
           },
         });
 
+        // fullStream 同时产出文本片段、工具调用和工具结果，这里统一分发处理。
         for await (const part of result.fullStream) {
           switch (part.type) {
             case "text-delta":
@@ -63,6 +66,7 @@ export async function agentLoop(
                 `\n[调用: ${part.toolName}(${JSON.stringify(part.input)})]`,
               );
 
+              // 在真正记录本次调用前先检测重复模式，便于提前打断工具死循环。
               const detection = detect(part.toolName, part.input);
               if (detection.stuck) {
                 console.log(`  ${detection.message}`);
@@ -121,6 +125,7 @@ export async function agentLoop(
       break;
     }
 
+    // 将模型本轮产生的 assistant/tool 消息回填历史，供下一步继续推理。
     messages.push(...stepResponse!.messages);
 
     const inp = stepUsage?.inputTokens?.total ?? stepUsage?.inputTokens ?? 0;

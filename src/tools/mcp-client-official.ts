@@ -27,6 +27,7 @@ export class MCPOfficialClient {
   private transport: StdioClientTransport;
   private serverName: string;
 
+  // 构造官方 SDK 客户端和 stdio 传输层，后续 connect 时才真正启动服务器进程。
   constructor(
     private command: string,
     private args: string[],

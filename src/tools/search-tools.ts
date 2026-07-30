@@ -19,6 +19,7 @@ export const tavilySearchTool: ToolDefinition = {
   isConcurrencySafe: true,
   isReadOnly: true,
   maxResultChars: 3000,
+  // 调用 Tavily 搜索接口，并把摘要和搜索结果整理成 Markdown 文本返回。
   execute: async ({ query, max_results = 5 }) => {
     const apiKey = process.env.TAVILY_API_KEY;
     if (!apiKey) return "[web_search] 错误：TAVILY_API_KEY 未设置";
@@ -73,6 +74,7 @@ export const serperSearchTool: ToolDefinition = {
   isConcurrencySafe: true,
   isReadOnly: true,
   maxResultChars: 3000,
+  // 调用 Serper 的 Google 搜索接口，按搜索结果顺序拼接标题、链接和摘要。
   execute: async ({ query, max_results = 5 }) => {
     const apiKey = process.env.SERPER_API_KEY;
     if (!apiKey) return "[serper_search] 错误：SERPER_API_KEY 未设置";
@@ -135,6 +137,7 @@ export const webFetchTool: ToolDefinition = {
   isConcurrencySafe: true,
   isReadOnly: true,
   maxResultChars: 3000,
+  // 抓取网页 HTML 并转换为 Markdown，让主模型负责后续阅读和总结。
   execute: async ({ url }: { url: string }) => {
     try {
       const res = await fetch(url, {
@@ -162,9 +165,10 @@ const turndown = new TurndownService({
 
 turndown.remove(["script", "style", "nav", "footer", "header", "iframe"]);
 
+// 只做格式转换，不在这里进行内容理解，保持工具职责单一。
 const htmlToMarkdown = (html: string): string => turndown.turndown(html);
 
-// 根据环境变量
+// 根据环境变量选择实际注册的搜索工具；没有配置时保留 Tavily 以返回清晰缺省错误。
 export function pickSearchTool(): ToolDefinition {
   if (process.env.TAVILY_API_KEY) return tavilySearchTool;
   if (process.env.SERPER_API_KEY) return serperSearchTool;

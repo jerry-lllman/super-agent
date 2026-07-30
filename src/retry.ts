@@ -1,3 +1,4 @@
+// 根据错误消息中的状态码或网络特征判断是否值得重试。
 export function isRetryable(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const message = error.message || "";
@@ -16,6 +17,7 @@ export function isRetryable(error: unknown): boolean {
   return false;
 }
 
+// 计算带抖动的指数退避时间，减少多个请求同时重试造成的尖峰。
 export function calculateDelay(
   attempt: number,
   baseMs = 500,
@@ -27,6 +29,7 @@ export function calculateDelay(
   return Math.max(0, Math.round(capped + (Math.random() * 2 - 1) * jitter));
 }
 
+// Promise 形式的延时工具，用于在重试前暂停当前异步流程。
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

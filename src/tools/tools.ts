@@ -29,6 +29,7 @@ export const weatherTool: ToolDefinition = {
   },
   isConcurrencySafe: true,
   isReadOnly: true,
+  // 从内置模拟天气表中读取城市天气，作为最简单的只读工具示例。
   execute: async ({ city }: { city: string }) => {
     const mockWeather: Record<string, string> = {
       北京: "晴，15-25°C，东南风 2 级",
@@ -58,6 +59,7 @@ export const calculatorTool: ToolDefinition = {
   },
   isConcurrencySafe: true,
   isReadOnly: true,
+  // 执行用户给出的数学表达式，演示工具如何把结构化参数转成结果字符串。
   execute: async ({ expression }: { expression: string }) => {
     try {
       const result = new Function(`return ${expression}`)();
@@ -82,6 +84,7 @@ export const readFileTool: ToolDefinition = {
   isConcurrencySafe: true,
   isReadOnly: true,
   maxResultChars: 500, // 演示用，生产环境通常 5000+
+  // 读取解析后的本地文件内容；结果会在 ToolRegistry 层按 maxResultChars 截断。
   execute: async ({ path }: { path: string }) => {
     return readFileSync(resolve(path), "utf-8");
   },
@@ -101,6 +104,7 @@ export const writeFileTool: ToolDefinition = {
   },
   isConcurrencySafe: false, // 写操作可能引发竞态条件，不能并发执行
   isReadOnly: false,
+  // 写入指定路径的完整内容；标记为非并发安全以避免多个写操作交错。
   execute: async ({ path, content }: { path: string; content: string }) => {
     writeFileSync(resolve(path), content, "utf-8");
     return `已写入 ${content.length} 字符到 ${path}`;
@@ -120,6 +124,7 @@ export const listDirectoryTool: ToolDefinition = {
   },
   isConcurrencySafe: true,
   isReadOnly: true,
+  // 枚举目录下一级内容，并用图标区分文件和子目录，便于模型快速理解结构。
   execute: async ({ path = "." }: { path?: string }) => {
     const resolved = resolve(path);
     return readdirSync(resolved)
@@ -159,6 +164,7 @@ export const editFileTool: ToolDefinition = {
     old_string: string;
     new_string: string;
   }) => {
+    // 先确认目标和匹配次数，确保 edit_file 只做一次明确的精确替换。
     const resolved = resolve(path);
     if (!existsSync(resolved)) return `文件不存在: ${path}`;
 
@@ -201,6 +207,7 @@ export const globTool: ToolDefinition = {
     pattern: string;
     path?: string;
   }) => {
+    // 使用 fast-glob 做文件名匹配，并跳过依赖、构建产物等常见噪声目录。
     const results = await fg(pattern, {
       cwd: resolve(path),
       ignore: ["node_modules/**", ".git/**", "dist/**", "build/**"],
@@ -260,6 +267,7 @@ export const grepTool: ToolDefinition = {
       ".lock",
     ]);
 
+    // 搜索单个文本文件，记录匹配行并限制总结果数量，避免返回内容过长。
     function searchFile(filePath: string) {
       if (matches.length >= 50) return; // 限制返回的匹配数量，避免过载
       const ext = filePath.slice(filePath.lastIndexOf("."));
@@ -283,6 +291,7 @@ export const grepTool: ToolDefinition = {
       }
     }
 
+    // 深度遍历目录树，把可读文本文件交给 searchFile 处理。
     function walk(dir: string) {
       if (matches.length >= 50) return;
       let entries: string[];
@@ -337,6 +346,7 @@ export const bashTool: ToolDefinition = {
   isConcurrencySafe: false,
   isReadOnly: false,
   maxResultChars: 3000,
+  // 运行本地 shell 命令；先探测当前运行环境是否允许启动子进程。
   execute: async ({ command }: { command: string }) => {
     try {
       execSync("echo test", { stdio: "ignore" });
@@ -378,6 +388,7 @@ export const fetchUrlTool: ToolDefinition = {
   isConcurrencySafe: true,
   isReadOnly: true,
   maxResultChars: 1500,
+  // 抓取 URL 并粗略剥离 HTML 标签，提供轻量级纯文本网页读取能力。
   execute: async ({ url }: { url: string }) => {
     try {
       const res = await fetch(url, {
@@ -431,6 +442,7 @@ export const startPreviewTool: ToolDefinition = {
   },
   isConcurrencySafe: false,
   isReadOnly: false,
+  // 启动静态预览服务器，把 app/ 目录中的生成页面暴露给浏览器访问。
   execute: async ({ port = 8080 }: { port?: number }) => {
     const root = resolve("app");
     if (!existsSync(root))
@@ -439,6 +451,7 @@ export const startPreviewTool: ToolDefinition = {
     if (previewServer) return `预览服务器已运行在 -> http://localhost:${port}`;
 
     previewServer = createServer((req, res) => {
+      // 每个请求都映射到 app/ 下的静态文件，目录请求默认返回 index.html。
       const urlPath = (req.url?.split("?")[0] || "/").replace(
         /\/$/,
         "/index.html",

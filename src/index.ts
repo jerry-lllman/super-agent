@@ -34,6 +34,7 @@ const toolSearchTool: ToolDefinition = {
   },
   isConcurrencySafe: true,
   isReadOnly: true,
+  // 按名称从注册表中查找延迟加载工具，并把完整定义暴露给模型。
   execute: async ({ query }: { query: string }) => {
     const results = registry.searchTools(query);
     if (results.length === 0) {
@@ -49,6 +50,7 @@ const toolSearchTool: ToolDefinition = {
 
 registry.register(toolSearchTool)
 
+// 根据环境和配置连接真实 GitHub MCP；失败或缺少凭据时降级到 Mock MCP。
 async function connectMCP() {
   const githubToken = process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
 
@@ -106,6 +108,7 @@ async function connectMCP() {
   console.log(`   已注册 ${tools.length} 个 Mock MCP 工具`);
 }
 
+// 启动 Agent：注册工具、构造系统提示、初始化命令行交互循环。
 async function main() {
   await connectMCP();
 
@@ -147,6 +150,7 @@ async function main() {
 
   const messages: ModelMessage[] = [];
 
+  // 递归读取用户输入；每轮把新消息交给 agentLoop 处理后继续等待下一句。
   function ask() {
     rl.question("\nYou: ", async (input) => {
       const trimmed = input.trim();

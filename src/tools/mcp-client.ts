@@ -22,6 +22,7 @@ export class MCPClient {
   >();
   private serverName: string;
 
+  // 保存 MCP 启动命令，并从包名推导一个便于日志识别的服务器名。
   constructor(
     private command: string,
     private args: string[],
@@ -31,6 +32,7 @@ export class MCPClient {
       args[args.length - 1]?.replace(/^@.*\//, "") || "mcp-server";
   }
 
+  // 启动 stdio MCP 子进程，建立 JSON-RPC 响应监听，并完成 initialize 握手。
   async connect(): Promise<void> {
     this.process = spawn(this.command, this.args, {
       stdio: ["pipe", "pipe", "pipe"],
@@ -75,6 +77,7 @@ export class MCPClient {
     );
   }
 
+  // 发送一条 JSON-RPC 请求，并用 id 把异步响应匹配回对应 Promise。
   private send(method: string, params?: any): Promise<any> {
     return new Promise((resolve, reject) => {
       const id = ++this.requestId;
@@ -99,11 +102,13 @@ export class MCPClient {
     });
   }
 
+  // 请求 MCP 服务器暴露的工具清单，供 ToolRegistry 动态注册。
   async listTools(): Promise<MCPTool[]> {
     const result = await this.send("tools/list", {});
     return result.tools || [];
   }
 
+  // 调用 MCP 工具并提取 text 类型内容，统一成 Agent 可读的字符串结果。
   async callTool(name: string, args: Record<string, unknown>): Promise<string> {
     const result: MCPCallResult = await this.send("tools/call", {
       name,
@@ -115,6 +120,7 @@ export class MCPClient {
     return texts.join("\n") || "(无返回内容)";
   }
 
+  // 关闭 readline 和子进程，释放 MCP 连接相关资源。
   async close(): Promise<void> {
     if (this.rl) this.rl.close();
     if (this.process) this.process.kill();
@@ -122,8 +128,10 @@ export class MCPClient {
 }
 
 export class MockMCPClient {
+  // Mock 客户端不需要建立真实连接，保留异步接口以兼容 MCPClient。
   async connect(): Promise<void> {}
 
+  // 返回一组固定工具定义，用于没有凭据或无法启动子进程时演示 MCP 注册流程。
   async listTools(): Promise<MCPTool[]> {
     return [
       {
@@ -154,6 +162,7 @@ export class MockMCPClient {
     ];
   }
 
+  // 根据工具名返回模拟数据，让上层逻辑无需区分真实 MCP 和 Mock MCP。
   async callTool(name: string, args: Record<string, unknown>): Promise<string> {
     switch (name) {
       case "list_issues":
@@ -210,5 +219,6 @@ export class MockMCPClient {
     }
   }
 
+  // 与真实客户端保持相同生命周期接口；Mock 没有资源需要释放。
   async close(): Promise<void> {}
 }

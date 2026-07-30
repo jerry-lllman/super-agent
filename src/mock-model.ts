@@ -17,6 +17,7 @@ interface ToolCallIntent {
   args: Record<string, unknown>;
 }
 
+// 从 AI SDK 的 prompt 结构中取出最后一条用户文本，供 mock 模型做意图判断。
 function extractUserText(prompt: any[]): string {
   const userMsgs = (prompt || []).filter((m: any) => m.role === "user");
   const last = userMsgs[userMsgs.length - 1];
@@ -27,10 +28,12 @@ function extractUserText(prompt: any[]): string {
     .toLowerCase();
 }
 
+// 判断上下文里是否已有工具结果，避免 mock 模型在同一轮里无限重复发起工具调用。
 function hasToolResults(prompt: any[]): boolean {
   return (prompt || []).some((m: any) => m.role === "tool");
 }
 
+// 用简单关键词和正则模拟模型的工具选择逻辑，返回要调用的工具及参数。
 function detectToolIntent(prompt: any[]): ToolCallIntent | null {
   const text = extractUserText(prompt);
 
@@ -81,6 +84,7 @@ function detectToolIntent(prompt: any[]): ToolCallIntent | null {
   return null;
 }
 
+// 根据上下文选择纯文本回复；如果已有工具结果，则把结果包装成自然语言回答。
 function pickTextResponse(prompt: any[]): string {
   if (hasToolResults(prompt)) {
     const toolMsgs = (prompt || []).filter((m: any) => m.role === "tool");
@@ -115,6 +119,7 @@ const USAGE = {
   outputTokens: { total: 1500, text: 1500, reasoning: undefined },
 };
 
+// 把预先构造好的事件片段按固定间隔输出，模拟真实模型的流式响应。
 function createDelayedStream(chunks: any[], delayMs = 30): ReadableStream {
   return new ReadableStream({
     start(controller) {
@@ -132,6 +137,7 @@ function createDelayedStream(chunks: any[], delayMs = 30): ReadableStream {
   });
 }
 
+// 创建一个符合 AI SDK 模型接口的本地 mock，便于无 API Key 时演示聊天、工具调用和重试。
 export function createMockModel() {
   return {
     specificationVersion: "v2" as const,
@@ -142,6 +148,7 @@ export function createMockModel() {
       return Promise.resolve({});
     },
 
+    // 非流式生成入口：根据 prompt 返回文本或 tool-call，供 AI SDK 的 generate 流程使用。
     async doGenerate({ prompt }: any) {
       const text = extractUserText(prompt);
 
@@ -189,6 +196,7 @@ export function createMockModel() {
       };
     },
 
+    // 流式生成入口：把文本或工具调用拆成 AI SDK 期望的事件序列。
     async doStream({ prompt }: any) {
       const text = extractUserText(prompt);
 

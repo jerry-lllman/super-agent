@@ -33,6 +33,7 @@ const BREAKER_THRESHOLD = 10; // 熔断阈值（演示用，生产环境通常�
 
 // --- 指纹计算 ---
 
+// 用稳定的 key 顺序序列化任意参数，确保对象字段顺序不同也能得到同一指纹。
 function stableStringify(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
@@ -40,14 +41,17 @@ function stableStringify(value: unknown): string {
   return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify((value as any)[k])}`).join(",")}}`;
 }
 
+// 生成短哈希用于日志和窗口统计，避免在历史记录里保存完整参数或结果。
 function hash(input: string): string {
   return createHash("sha256").update(input).digest("hex").slice(0, 16);
 }
 
+// 将工具名和参数一起纳入指纹，区分“同参数调用不同工具”的情况。
 export function hashToolCall(toolName: string, params: unknown): string {
   return `${toolName}:${hash(stableStringify(params))}`;
 }
 
+// 为工具结果生成指纹，用来判断多次调用是否真的产生了新信息。
 export function hashResult(result: unknown): string {
   return hash(stableStringify(result));
 }
@@ -56,6 +60,7 @@ export function hashResult(result: unknown): string {
 
 const history: ToolCallRecord[] = [];
 
+// 记录一次工具调用，并维护固定长度滑动窗口，防止历史无限增长。
 export function recordCall(toolName: string, params: unknown): void {
   history.push({
     toolName,
@@ -65,6 +70,7 @@ export function recordCall(toolName: string, params: unknown): void {
   if (history.length > HISTORY_SIZE) history.shift();
 }
 
+// 把工具执行结果补写回最近一次匹配的调用记录，供“无进展”检测使用。
 export function recordResult(
   toolName: string,
   params: unknown,
@@ -84,12 +90,14 @@ export function recordResult(
   }
 }
 
+// 每次新的 agentLoop 开始前清空检测窗口，避免不同用户问题之间互相影响。
 export function resetHistory(): void {
   history.length = 0;
 }
 
 // --- 检测器 ---
 
+// 统计同一工具同一参数连续返回相同结果的次数，衡量是否“没有进展”。
 function getNoProgressStreak(toolName: string, argsHash: string): number {
   let streak = 0;
   let lastResultHash: string | undefined;
@@ -109,6 +117,7 @@ function getNoProgressStreak(toolName: string, argsHash: string): number {
   return streak;
 }
 
+// 检测最近调用是否在两个参数指纹之间来回切换，识别典型乒乓循环。
 function getPingPongCount(currentHash: string): number {
   if (history.length < 3) return 0;
 
@@ -135,6 +144,7 @@ function getPingPongCount(currentHash: string): number {
 
 // --- 主检测函数 ---
 
+// 综合无进展、乒乓和普通重复三个检测器，返回是否需要提醒或熔断。
 export function detect(toolName: string, params: unknown): DetectionResult {
   const argsHash = hashToolCall(toolName, params);
   const noProgress = getNoProgressStreak(toolName, argsHash);
