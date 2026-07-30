@@ -9,6 +9,13 @@ import { allTools } from "./tools/tools";
 import { agentLoop } from "./agent-loop";
 import { MCPClient, MockMCPClient } from "./tools/mcp-client";
 import { SessionStore } from "./session/store";
+import {
+  coreRules,
+  deferredTools,
+  PromptBuilder,
+  sessionContext,
+  toolGuide,
+} from "./context/prompt-builder";
 
 const llm = createDeepSeek({
   baseURL: process.env.SUPER_AI_API_BASE_URL,
@@ -128,13 +135,6 @@ async function main() {
     console.log(`- ${tool.name}: ${tool.description} [${flags}]`);
   }
 
-  const deferredSummary = registry.getDeferredToolSummary();
-
-  const systemPrompt = `你是 Super Agent，一个有工具调用能力的 AI 助手。
-你有内置工具和 MCP 工具可用。
-如果你需要的工具不在当前列表中，使用 tool_search 工具搜索可用工具。
-回答要简洁直接。${deferredSummary}`;
-
   const allCount = registry.getAll().length;
   const activeTools = registry.getActiveTools();
   const estimate = registry.countTokenEstimate();
@@ -153,6 +153,7 @@ async function main() {
   });
 
   const isContinue = process.argv.includes("--continue");
+  const sessionId = "default";
   const store = new SessionStore("default");
 
   let messages: ModelMessage[] = [];
@@ -162,6 +163,25 @@ async function main() {
   } else {
     console.log(`[Session] 新会话`);
   }
+
+  const deferredSummary = registry.getDeferredToolSummary();
+
+  // 根据 KV Cache 的工作原理——prompt 进行排列
+  const builder = new PromptBuilder()
+    .pipe("coreRules", coreRules())
+    .pipe("toolGuide", toolGuide())
+    .pipe("deferredTools", deferredTools())
+    .pipe("sessionContext", sessionContext());
+
+  const promptContext = {
+    toolCount: registry.getActiveTools().length,
+    deferredToolSummary: deferredSummary,
+    sessionMessageCount: messages.length,
+    sessionId,
+  };
+
+  const systemPrompt = builder.build(promptContext);
+  builder.debug(promptContext); // 显示每个 prompt pipe 的状态和长度，便于调试。
 
   // 递归读取用户输入；每轮把新消息交给 agentLoop 处理后继续等待下一句。
   function ask() {
