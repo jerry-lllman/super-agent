@@ -122,12 +122,21 @@ async function main() {
 
   const deferredSummary = registry.getDeferredToolSummary()
 
-  console.log(`\n deferredSummary: ${deferredSummary} \n`)
-
   const systemPrompt = `你是 Super Agent，一个有工具调用能力的 AI 助手。
 你有内置工具和 MCP 工具可用。
 如果你需要的工具不在当前列表中，使用 tool_search 工具搜索可用工具。
 回答要简洁直接。${deferredSummary}`;
+
+
+  const allCount = registry.getAll().length
+  const activeTools = registry.getActiveTools()
+  const estimate = registry.countTokenEstimate()
+
+  console.log(`\n=== 工具统计 ===`)
+  console.log(`   全部工具：${allCount} 个`)
+  console.log(`   活跃工具：${activeTools.length} 个`)
+  console.log(`   延迟工具：${allCount - activeTools.length} 个`)
+  console.log(`   Token 估算：～${estimate.active} (活跃) + ~${estimate.deferred} (延迟，不占 prompt)`)
 
 
   const rl = createInterface({

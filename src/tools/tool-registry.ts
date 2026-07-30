@@ -106,6 +106,29 @@ export class ToolRegistry {
     return `\n以下工具可用，但需要先通过 tool_search 搜索获取完整定义：\n${lines.join('\n')}`
   }
 
+  countTokenEstimate(): { active: number; deferred: number; total: number } {
+    let active = 0;
+    let deferred = 0;
+
+    for (const tool of this.tools.values()) {
+      const schemaSize = JSON.stringify({
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters
+      }).length
+
+      const tokens = Math.ceil(schemaSize / 4)
+
+      if (tool.shouldDefer && !this.discoveredTools.has(tool.name)) {
+        deferred += tokens
+      } else {
+        active += tokens
+      }
+    }
+
+    return { active, deferred, total: active + deferred }
+  }
+
   private async acquireConcurrent(): Promise<void> {
     while (this.exclusiveLock) {
       await new Promise<void>((r) => this.waitQueue.push(r));
@@ -152,10 +175,10 @@ export class ToolRegistry {
         execute: async (input: any) => {
           if (isSafe) {
             await registry.acquireConcurrent();
-            console.log(`  [并发] ${name} 获取共享锁`);
+            console.log(`  [并发] ${tool.name} 获取共享锁`);
           } else {
             await registry.acquireExclusive();
-            console.log(`  [串行] ${name} 获取独占锁，等待其他工具完成`);
+            console.log(`  [串行] ${tool.name} 获取独占锁，等待其他工具完成`);
           }
           try {
             const raw = await executeFn(input);
@@ -184,6 +207,7 @@ export class ToolRegistry {
       : [q]
 
     for (const name of names) {
+      console.log(`[search_tool: tool_name]: ${name}`)
       const tool = this.tools.get(name)
 
       if (tool && tool.name !== 'tool_search') {
