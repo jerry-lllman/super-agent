@@ -43,7 +43,9 @@ export async function agentLoop(
           tools: registry.toAISDKFormat(),
           messages,
           maxRetries: 0,
-          onError: () => { },
+          onError: ({ error }) => {
+            console.error("❌ [stream error]", error);
+          },
           // 关闭 DeepSeek v4 的 thinking 模式，避免多轮 + 工具调用时
           // 因 reasoning_content 校验失败而 400。对其它 provider 是无副作用的额外字段。
           providerOptions: {

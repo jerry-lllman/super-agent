@@ -8,13 +8,14 @@ import { ToolDefinition, ToolRegistry } from "./tools/tool-registry";
 import { allTools } from "./tools/tools";
 import { agentLoop } from "./agent-loop";
 import { MCPClient, MockMCPClient } from "./tools/mcp-client";
+import { SessionStore } from "./session/store";
 
 const llm = createDeepSeek({
-  baseURL: process.env.OPENAI_API_BASE_URL,
-  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: process.env.SUPER_AI_API_BASE_URL,
+  apiKey: process.env.SUPER_AI_API_KEY,
 });
 
-const model = process.env.OPENAI_API_KEY
+const model = process.env.SUPER_AI_API_KEY
   ? llm("deepseek-v4-flash")
   : createMockModel();
 
@@ -22,14 +23,19 @@ const registry = new ToolRegistry();
 registry.register(...allTools);
 
 const toolSearchTool: ToolDefinition = {
-  name: 'tool_search',
-  description: '获取延迟工具的完整定义。传入工具名（从系统提示的延迟工具列表中选取），返回该工具的完整参数 Schema',
+  name: "tool_search",
+  description:
+    "获取延迟工具的完整定义。传入工具名（从系统提示的延迟工具列表中选取），返回该工具的完整参数 Schema",
   parameters: {
-    type: 'object',
+    type: "object",
     properties: {
-      query: { type: 'string', description: '工具名，如 "mcp__github__list_issues"。支持逗号分隔多个工具名' },
+      query: {
+        type: "string",
+        description:
+          '工具名，如 "mcp__github__list_issues"。支持逗号分隔多个工具名',
+      },
     },
-    required: ['query'],
+    required: ["query"],
     additionalProperties: false,
   },
   isConcurrencySafe: true,
@@ -40,7 +46,7 @@ const toolSearchTool: ToolDefinition = {
     if (results.length === 0) {
       return `没有找到匹配 "${query}" 的工具`;
     }
-    return results.map(t => ({
+    return results.map((t) => ({
       name: t.name,
       description: t.description,
       parameters: t.parameters,
@@ -48,7 +54,7 @@ const toolSearchTool: ToolDefinition = {
   },
 };
 
-registry.register(toolSearchTool)
+registry.register(toolSearchTool);
 
 // 根据环境和配置连接真实 GitHub MCP；失败或缺少凭据时降级到 Mock MCP。
 async function connectMCP() {
@@ -70,9 +76,8 @@ async function connectMCP() {
     try {
       let client: MCPClient | MockMCPClient;
       if (useOfficialSDK) {
-        const { MCPOfficialClient } = await import(
-          "./tools/mcp-client-official"
-        );
+        const { MCPOfficialClient } =
+          await import("./tools/mcp-client-official");
         client = new MCPOfficialClient(
           "npx",
           ["-y", "@modelcontextprotocol/server-github"],
@@ -123,32 +128,40 @@ async function main() {
     console.log(`- ${tool.name}: ${tool.description} [${flags}]`);
   }
 
-  const deferredSummary = registry.getDeferredToolSummary()
+  const deferredSummary = registry.getDeferredToolSummary();
 
   const systemPrompt = `你是 Super Agent，一个有工具调用能力的 AI 助手。
 你有内置工具和 MCP 工具可用。
 如果你需要的工具不在当前列表中，使用 tool_search 工具搜索可用工具。
 回答要简洁直接。${deferredSummary}`;
 
+  const allCount = registry.getAll().length;
+  const activeTools = registry.getActiveTools();
+  const estimate = registry.countTokenEstimate();
 
-  const allCount = registry.getAll().length
-  const activeTools = registry.getActiveTools()
-  const estimate = registry.countTokenEstimate()
-
-  console.log(`\n=== 工具统计 ===`)
-  console.log(`   全部工具：${allCount} 个`)
-  console.log(`   活跃工具：${activeTools.length} 个`)
-  console.log(`   延迟工具：${allCount - activeTools.length} 个`)
-  console.log(`   Token 估算：～${estimate.active} (活跃) + ~${estimate.deferred} (延迟，不占 prompt)`)
-
+  console.log(`\n=== 工具统计 ===`);
+  console.log(`   全部工具：${allCount} 个`);
+  console.log(`   活跃工具：${activeTools.length} 个`);
+  console.log(`   延迟工具：${allCount - activeTools.length} 个`);
+  console.log(
+    `   Token 估算：～${estimate.active} (活跃) + ~${estimate.deferred} (延迟，不占 prompt)\n`,
+  );
 
   const rl = createInterface({
     input: process.stdin,
     output: process.stdout,
   });
 
+  const isContinue = process.argv.includes("--continue");
+  const store = new SessionStore("default");
 
-  const messages: ModelMessage[] = [];
+  let messages: ModelMessage[] = [];
+  if (isContinue && store.exists()) {
+    messages = store.load();
+    console.log(`[Session] 恢复会话，${messages.length} 条历史消息`);
+  } else {
+    console.log(`[Session] 新会话`);
+  }
 
   // 递归读取用户输入；每轮把新消息交给 agentLoop 处理后继续等待下一句。
   function ask() {

@@ -67,8 +67,8 @@ Anthropic Claude 的 thinking block 有类似（且更严格）的要求：必�
 import { createDeepSeek } from "@ai-sdk/deepseek";
 
 const llm = createDeepSeek({
-  baseURL: process.env.OPENAI_API_BASE_URL,
-  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: process.env.SUPER_AI_API_BASE_URL,
+  apiKey: process.env.SUPER_AI_API_KEY,
 });
 const model = llm("deepseek-v4-flash");
 ```
