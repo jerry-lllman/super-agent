@@ -169,13 +169,22 @@ async function main() {
       const trimmed = input.trim();
       if (!trimmed || trimmed === "exit") {
         console.log("Bye!");
+        await registry.closeAllMCP();
         rl.close();
         return;
       }
 
-      messages.push({ role: "user", content: trimmed });
+      const userMessage: ModelMessage = { role: "user", content: trimmed };
+      messages.push(userMessage);
+      store.append(userMessage);
+
+      const beforeLength = messages.length;
 
       await agentLoop(model, registry, messages, systemPrompt);
+
+      // 记录本轮对话新增的消息，避免重复落盘。(agent loop 往 messages 里 push assistant/tool 消息)
+      const newMessages = messages.slice(beforeLength);
+      store.appendAll(newMessages);
 
       ask();
     });
