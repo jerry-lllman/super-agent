@@ -6,7 +6,7 @@ import { createMockModel } from "./mock-model";
 import { createInterface } from "node:readline";
 import { ToolDefinition, ToolRegistry } from "./tools/registry";
 import { allTools } from "./tools";
-import { agentLoop } from "./agent-loop";
+import { agentLoop } from "./agent/loop";
 import { MCPClient, MockMCPClient } from "./tools/mcp-client";
 import { SessionStore } from "./session/store";
 import {
