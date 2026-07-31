@@ -1,5 +1,5 @@
 import { jsonSchema } from "ai";
-import { MCPClient, MockMCPClient } from "./mcp-client";
+import { IMCPClient } from "./mcp-client";
 
 export interface ToolDefinition {
   name: string;
@@ -17,7 +17,7 @@ const DEFAULT_MAX_RESULT_CHARS = 3000;
 
 export class ToolRegistry {
   private tools = new Map<string, ToolDefinition>();
-  private mcpClients: Array<MCPClient | MockMCPClient> = [];
+  private mcpClients: Array<IMCPClient> = [];
 
   private exclusiveLock = false;
   private concurrentCount = 0;
@@ -35,7 +35,7 @@ export class ToolRegistry {
   // 连接一个 MCP 服务器，把远端工具转换成本项目统一的 ToolDefinition 并注册。
   async registerMCPServer(
     serverName: string,
-    client: MCPClient | MockMCPClient,
+    client: IMCPClient,
   ): Promise<string[]> {
     await client.connect();
     this.mcpClients.push(client);

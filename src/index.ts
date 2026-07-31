@@ -2,12 +2,11 @@ import "dotenv/config";
 import { type ModelMessage } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 
-import { createMockModel } from "./mock-model";
 import { createInterface } from "node:readline";
 import { ToolDefinition, ToolRegistry } from "./tools/registry";
 import { allTools } from "./tools";
 import { agentLoop } from "./agent/loop";
-import { MCPClient, MockMCPClient } from "./tools/mcp-client";
+import { IMCPClient, MCPClient } from "./tools/mcp-client";
 import { SessionStore } from "./session/store";
 import {
   coreRules,
@@ -23,9 +22,7 @@ const llm = createDeepSeek({
   apiKey: process.env.SUPER_AI_API_KEY,
 });
 
-const model = process.env.SUPER_AI_API_KEY
-  ? llm("deepseek-v4-flash")
-  : createMockModel();
+const model = llm("deepseek-v4-flash");
 
 const registry = new ToolRegistry();
 registry.register(...allTools);
@@ -64,7 +61,7 @@ const toolSearchTool: ToolDefinition = {
 
 registry.register(toolSearchTool);
 
-// 根据环境和配置连接真实 GitHub MCP；失败或缺少凭据时降级到 Mock MCP。
+// 根据环境和配置连接真实 GitHub MCP；失败或缺少凭据时跳过 MCP 注册。
 async function connectMCP() {
   const githubToken = process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
 
@@ -82,7 +79,7 @@ async function connectMCP() {
     console.log(`\n正在连接 Github MCP 服务器 (${implLabel})...`);
 
     try {
-      let client: MCPClient | MockMCPClient;
+      let client: IMCPClient;
       if (useOfficialSDK) {
         const { MCPOfficialClient } =
           await import("./tools/mcp-client-official");
@@ -106,19 +103,14 @@ async function connectMCP() {
       console.log(
         `   Github MCP连接失败：${error instanceof Error ? error.message : error}`,
       );
-      console.log("   降级为 Mock MCP");
     }
   }
 
   if (!githubToken) {
     console.log(
-      "\n为配置 GITHUB_PERSONAL_ACCESS_TOKEN，无法连接 Github MCP 服务器，已降级为 Mock MCP",
+      "\n未配置 GITHUB_PERSONAL_ACCESS_TOKEN，跳过 Github MCP 服务器连接",
     );
   }
-
-  const mockClient = new MockMCPClient();
-  const tools = await registry.registerMCPServer("github", mockClient);
-  console.log(`   已注册 ${tools.length} 个 Mock MCP 工具`);
 }
 
 // 启动 Agent：注册工具、构造系统提示、初始化命令行交互循环。
