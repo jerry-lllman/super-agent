@@ -104,7 +104,7 @@ const COMPRESS_PROMPT = `你是一个对话压缩系统。你的任务是把 Age
 
 // 演示用，使用 300 tokens 作为阈值，超过则触发压缩。实际部署时可根据模型上下文长度调整。
 // Claude Code 的阈值大约在上下文窗口的 87%
-const CONTEXT_TOKEN_THRESHOLD = 300;
+const CONTEXT_TOKEN_THRESHOLD = 3000;
 const KEEP_RECENT_MESSAGES = 6;
 
 export interface CompactionResult {

@@ -157,39 +157,6 @@ async function main() {
     console.log(`[Session] 新会话`);
   }
 
-  let summary = "";
-
-  // ———— 压缩演示 ————
-  const beforeTokens = estimateTokens(messages);
-  console.log(
-    `\n[压缩前] ${messages.length} 条消息，约 ${beforeTokens} tokens`,
-  );
-
-  // Layer 1: Microcompact
-  const mc = microcompact(messages);
-  const afterMCTokens = estimateTokens(messages);
-  console.log(
-    `[Layer 1: Microcompact] 清理了 ${mc.cleared} 个工具结果，约 ${afterMCTokens} tokens`,
-  );
-
-  // Layer 2: LLM Summarization
-  const compResult = await summarize(model, messages, summary);
-  messages = compResult.messages;
-  summary = compResult.summary;
-  const afterSummarizationTokens = estimateTokens(messages);
-  if (compResult.compressedCount > 0) {
-    console.log(
-      `[Layer 2: Summarization] 压缩了 ${compResult.compressedCount} 条消息，约 ${afterSummarizationTokens} tokens`,
-    );
-    console.log(`   [压缩摘要]: ${summary}`);
-  } else {
-    console.log(`[Layer 2: Summarization] 没有可压缩的消息`);
-  }
-
-  console.log(
-    `[压缩后] ${messages.length} 条消息，约 ${afterSummarizationTokens} tokens (节省 ${beforeTokens - afterSummarizationTokens} tokens)\n`,
-  );
-
   // 根据 KV Cache 的工作原理——prompt 进行排列
   const builder = new PromptBuilder()
     .pipe("coreRules", coreRules())
@@ -230,6 +197,40 @@ async function main() {
       const newMessages = messages.slice(beforeLength);
       store.appendAll(newMessages);
 
+      // 在下一轮消息开始之前检查是否需要进行压缩
+      const currentTokens = estimateTokens(messages);
+
+      if (currentTokens > 3000) {
+        let summary = "";
+        console.log(
+          `\n[压缩前] ${messages.length} 条消息，约 ${currentTokens} tokens`,
+        );
+
+        // Layer 1: Microcompact
+        const mc = microcompact(messages);
+        const afterMCTokens = estimateTokens(messages);
+        console.log(
+          `[Layer 1: Microcompact] 清理了 ${mc.cleared} 个工具结果，约 ${afterMCTokens} tokens`,
+        );
+
+        // Layer 2: LLM Summarization
+        const compResult = await summarize(model, messages, summary);
+        messages = compResult.messages;
+        summary = compResult.summary;
+        const afterSummarizationTokens = estimateTokens(messages);
+        if (compResult.compressedCount > 0) {
+          console.log(
+            `[Layer 2: Summarization] 压缩了 ${compResult.compressedCount} 条消息，约 ${afterSummarizationTokens} tokens`,
+          );
+          console.log(`   [压缩摘要]: ${summary}`);
+        } else {
+          console.log(`[Layer 2: Summarization] 没有可压缩的消息`);
+        }
+
+        console.log(
+          `[压缩后] ${messages.length} 条消息，约 ${afterSummarizationTokens} tokens (节省 ${currentTokens - afterSummarizationTokens} tokens)\n`,
+        );
+      }
       ask();
     });
   }
