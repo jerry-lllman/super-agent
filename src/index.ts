@@ -16,6 +16,7 @@ import {
   sessionContext,
   toolGuide,
 } from "./context/prompt-builder";
+import { estimateTokens, microcompact, summarize } from "./context/compressor";
 
 const llm = createDeepSeek({
   baseURL: process.env.SUPER_AI_API_BASE_URL,
@@ -164,7 +165,38 @@ async function main() {
     console.log(`[Session] 新会话`);
   }
 
-  const deferredSummary = registry.getDeferredToolSummary();
+  let summary = "";
+
+  // ———— 压缩演示 ————
+  const beforeTokens = estimateTokens(messages);
+  console.log(
+    `\n[压缩前] ${messages.length} 条消息，约 ${beforeTokens} tokens`,
+  );
+
+  // Layer 1: Microcompact
+  const mc = microcompact(messages);
+  const afterMCTokens = estimateTokens(messages);
+  console.log(
+    `[Layer 1: Microcompact] 清理了 ${mc.cleared} 个工具结果，约 ${afterMCTokens} tokens`,
+  );
+
+  // Layer 2: LLM Summarization
+  const compResult = await summarize(model, messages, summary);
+  messages = compResult.messages;
+  summary = compResult.summary;
+  const afterSummarizationTokens = estimateTokens(messages);
+  if (compResult.compressedCount > 0) {
+    console.log(
+      `[Layer 2: Summarization] 压缩了 ${compResult.compressedCount} 条消息，约 ${afterSummarizationTokens} tokens`,
+    );
+    console.log(`   [压缩摘要]: ${summary}`);
+  } else {
+    console.log(`[Layer 2: Summarization] 没有可压缩的消息`);
+  }
+
+  console.log(
+    `[压缩后] ${messages.length} 条消息，约 ${afterSummarizationTokens} tokens (节省 ${beforeTokens - afterSummarizationTokens} tokens)\n`,
+  );
 
   // 根据 KV Cache 的工作原理——prompt 进行排列
   const builder = new PromptBuilder()
@@ -175,7 +207,7 @@ async function main() {
 
   const promptContext = {
     toolCount: registry.getActiveTools().length,
-    deferredToolSummary: deferredSummary,
+    deferredToolSummary: registry.getDeferredToolSummary(),
     sessionMessageCount: messages.length,
     sessionId,
   };
